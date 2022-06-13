@@ -1,6 +1,6 @@
-CREATE TABLE `ama_sessions`
+CREATE TABLE `Threads`
 (
-  `session_id` int NOT NULL AUTO_INCREMENT,
+  `thread_Id` int NOT NULL AUTO_INCREMENT,
   `name` varchar
 (256) CHARACTER
 SET utf8
@@ -23,5 +23,5 @@ COLLATE utf8_general_ci DEFAULT NULL,
 (1) DEFAULT '0',
   `created_at` int DEFAULT NULL,
   PRIMARY KEY
-(`session_id`)
+(`thread_Id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=255 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
