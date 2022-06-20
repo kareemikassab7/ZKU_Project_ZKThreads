@@ -7,6 +7,11 @@ import "@appliedzkp/semaphore-contracts/base/SemaphoreGroups.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 
+/*///////////////////////////Insights///////////////////////////
+  
+- state is to be considered to remove threads, comments, replies later
+
+//////////////////////////////////////////////////////////////*/
 contract zkThreads is SemaphoreCore, SemaphoreGroups, Ownable {
     ///////////////// Variables
 
@@ -37,7 +42,7 @@ contract zkThreads is SemaphoreCore, SemaphoreGroups, Ownable {
 
     IVerifier public verifier;
     ///////////////// Events
-    event NewThread();
+    event NewThread(uint256 threadId);
     event NewComment(uint256 threadId, uint256 commentId, bytes32 signal);
     event NewReply(uint256 threadId, uint256 commentId, uint256 replyId);
     event CommentLiked(uint256 threadId, uint256 commentId, uint256 likes);
@@ -50,6 +55,32 @@ contract zkThreads is SemaphoreCore, SemaphoreGroups, Ownable {
 
     ///////////////// Modifiers
     ///////////////// Functions
+    function createThread(uint256 threadId) external payable {
+        require(
+            msg.value >= fee,
+            " Insufficient funds for creating a new Thread"
+        );
+
+        _createGroup(threadId, 20, 0);
+
+        Thread[threadId] = AmaSession({
+            threadId: threadId,
+            owner: msg.sender /*,
+            state: NOT_STARTED*/
+        });
+
+        emit NewThread(threadId);
+    }
+
+    function joinThread(
+        uint256 threadId,
+        uint256 identityCommitment ///amaExists(threadId) canJoinAma(threadId)
+    ) external {
+        _addMember(threadId, identityCommitment);
+        threadIdentityCommitments[threadId].push(identityCommitment);
+
+        // emit UserJoinedAmaSession(threadId, identityCommitment); remmeber event here
+    }
 
     function postComment(
         uint256 threadId,
@@ -142,10 +173,18 @@ contract zkThreads is SemaphoreCore, SemaphoreGroups, Ownable {
         return (commentId, Comments[id].likes);
     }
 
-    /*
-        function likeReply(
+    function getIdentityCommitments(uint256 threadId)
+        external
+        view
+        returns (uint256[] memory)
+    {
+        return threadIdentityCommitments[threadId];
+    }
+
+    function likeReply(
         uint256 sessionId,
         uint256 commentId,
+        uint256 replyId,
         bytes32 signal,
         uint256 root,
         uint256 nullifierHash,
@@ -161,17 +200,21 @@ contract zkThreads is SemaphoreCore, SemaphoreGroups, Ownable {
                 proof,
                 verifier
             ),
-            "AMA: the proof is not valid"
+            "the proof is not valid"
         );
 
         // add votes to comment. commentId is unique across all sessions
-        bytes32 id = keccak256(abi.encodePacked(commentId));
-        Comments[id].likes += 1;
+        bytes32 id = keccak256(abi.encodePacked(replyId));
+        Replies[id].likes += 1;
 
-        // Prevent double-voting of the same comment
+        // Prevent double liking of the same comment
         _saveNullifierHash(nullifierHash);
 
-        emit CommentLiked(sessionId, commentId, Comments[id].likes);
-        return (commentId, Comments[id].likes);
-    }*/
+        emit CommentLiked(sessionId, replyId, Replies[id].likes);
+        return (replyId, Replies[id].likes);
+    }
+
+    fallback() external payable {}
+
+    receive() external payable {}
 }
