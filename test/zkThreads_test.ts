@@ -3,9 +3,8 @@ import { generateMerkleProof, genExternalNullifier, Semaphore, StrBigInt } from 
 import { expect } from "chai"
 import { Contract, Signer } from "ethers"
 import { ethers, run } from "hardhat"
-describe("AMA", function () {
+describe("zkThreads", function () {
     let contract: Contract
-
     const DEPTH = 20;
     const ZERO_VALUE = BigInt(0);
     const WASM_FILEPATH = "./public/semaphore.wasm"
@@ -13,8 +12,9 @@ describe("AMA", function () {
     const IDENTITY_MESSAGE = "Sign this message to create your identity!";
 
     // declare test data
-    const sessionIds = [BigInt(1), BigInt(2)];
-    const questionIds = [BigInt(1), BigInt(2)];
+    const threadIds = [BigInt(1), BigInt(2)];
+    const commentIds = [BigInt(1), BigInt(2)];
+    const replyIds = [BigInt(1), BigInt(2)];
     // declare session states
     const PAUSED = 2;
     const ACTIVE = 3;
@@ -34,76 +34,76 @@ describe("AMA", function () {
         charlie = signers[2];
     })
 
-    describe("# AMA sessions (a.k.a Semaphore Groups)", () => {
-        it("Should create an AMA session", async () => {
-            const transaction = contract.createAmaSession(sessionIds[0], { value: ethers.utils.parseEther("1") });
-            await expect(transaction).to.emit(contract, "AmaSessionCreated").withArgs(sessionIds[0])
+    describe("Threads ( Semaphore Groups)", () => {
+        it("Should create a new Thread", async () => {
+            const transaction = contract.createThread(threadIds[0], { value: ethers.utils.parseEther("1") });
+            await expect(transaction).to.emit(contract, "NewThread").withArgs(threadIds[0])
         })
 
-        it("Should not create a duplicated AMA session", async () => {
-            const transaction = contract.createAmaSession(sessionIds[0], { value: ethers.utils.parseEther("1") });
+        it("Should not create a duplicated Thread", async () => {
+            const transaction = contract.createThread(threadIds[0], { value: ethers.utils.parseEther("1") });
             await expect(transaction).to.be.revertedWith("SemaphoreGroups: group already exists");
         })
 
-        it("Should not create an AMA session with insufficient funds", async () => {
-            const transaction = contract.createAmaSession(sessionIds[1], { value: ethers.utils.parseEther("0.5") });
-            await expect(transaction).to.be.revertedWith("Insufficient funds for creating an AMA session");
+        it("Should not create a Thread with insufficient funds", async () => {
+            const transaction = contract.createThread(threadIds[1], { value: ethers.utils.parseEther("0.5") });
+            await expect(transaction).to.be.revertedWith("Insufficient funds for creating a Thread");
         })
 
-        it("Should change fee for creating an AMA session", async () => {
+        it("Should change fee for creating a Thread", async () => {
             const transaction = contract.changeFee(ethers.utils.parseEther("2"));
             await expect(transaction).to.emit(contract, "FeeChanged").withArgs(ethers.utils.parseEther("2"))
         })
 
-        it("Should be able to create another AMA session", async () => {
-            const transaction = contract.createAmaSession(sessionIds[1], { value: ethers.utils.parseEther("2") });
-            await expect(transaction).to.emit(contract, "AmaSessionCreated").withArgs(sessionIds[1]);
+        it("Should be able to create another Thread", async () => {
+            const transaction = contract.createThread(threadIds[1], { value: ethers.utils.parseEther("2") });
+            await expect(transaction).to.emit(contract, "NewThread").withArgs(threadIds[1]);
         })
 
-        it("Should start the AMA session", async () => {
-            const transaction = contract.startAmaSession(sessionIds[0]);
-            await expect(transaction).to.emit(contract, "AmaSessionStatusChanged").withArgs(sessionIds[0], ACTIVE)
+        it("Should start the Thread", async () => {
+            const transaction = contract.startThread(threadIds[0]);
+            await expect(transaction).to.emit(contract, "ThreadStatusChanged").withArgs(threadIds[0], ACTIVE)
         })
 
-        it("Should join an AMA session (Alice)", async () => {
+        it("Should join a Thread (Alice)", async () => {
             // create an identity commitment for the user
             const message = await alice.signMessage(IDENTITY_MESSAGE)
 
             const identity = new ZkIdentity(Strategy.MESSAGE, message)
             const identityCommitment = identity.genIdentityCommitment()
 
-            const transaction = contract.joinAmaSession(sessionIds[0], identityCommitment);
-            await expect(transaction).to.emit(contract, "UserJoinedAmaSession").withArgs(sessionIds[0], identityCommitment)
+            const transaction = contract.joinThread(threadIds[0], identityCommitment);
+            await expect(transaction).to.emit(contract, "UserJoinedThread").withArgs(threadIds[0], identityCommitment)
         })
 
-        it("Should join an AMA session (Bob)", async () => {
+        it("Should join a Thread (Bob)", async () => {
             // create an identity commitment for the user
             const message = await bob.signMessage(IDENTITY_MESSAGE)
 
             const identity = new ZkIdentity(Strategy.MESSAGE, message)
             const identityCommitment = identity.genIdentityCommitment()
 
-            const transaction = contract.joinAmaSession(sessionIds[0], identityCommitment);
-            await expect(transaction).to.emit(contract, "UserJoinedAmaSession").withArgs(sessionIds[0], identityCommitment)
+            const transaction = contract.joinThread(threadIds[0], identityCommitment);
+            await expect(transaction).to.emit(contract, "UserJoinedThread").withArgs(threadIds[0], identityCommitment)
         })
 
-        it("Should join an AMA session (Charlie)", async () => {
+        it("Should join a Thread (Charlie)", async () => {
             // create an identity commitment for the user
             const message = await charlie.signMessage(IDENTITY_MESSAGE)
 
             const identity = new ZkIdentity(Strategy.MESSAGE, message)
             const identityCommitment = identity.genIdentityCommitment()
 
-            const transaction = contract.joinAmaSession(sessionIds[0], identityCommitment);
-            await expect(transaction).to.emit(contract, "UserJoinedAmaSession").withArgs(sessionIds[0], identityCommitment)
+            const transaction = contract.joinThread(threadIds[0], identityCommitment);
+            await expect(transaction).to.emit(contract, "UserJoinedThread").withArgs(threadIds[0], identityCommitment)
         })
     })
 
-    describe("# AMA questions (a.k.a Signals)", () => {
+    describe("# Thread Comments and Replies (a.k.a Signals)", () => {
         let identity: ZkIdentity;
         let identityCommitment: bigint;
         let identityCommitments: StrBigInt[] = [];
-        let signals = ["post", "vote"]; // user may only "post" a question or "vote" on a question, but not both
+        let signals = ["post", "vote"]; // user can post/like a dicussion opinion (comment or reply) //Improvement: ppl can like multiple comments, aka each comment is a semaphore group
         let bytes32Signal0: string;
 
         before(async () => {
@@ -114,108 +114,190 @@ describe("AMA", function () {
 
             bytes32Signal0 = ethers.utils.formatBytes32String(signals[0])
 
-            // fetch identity commitments for sessionIds[0]
-            const identityCommitmentsBN = await contract.getIdentityCommitments(sessionIds[0]);
+            // fetch identity commitments for threadIds[0]
+            const identityCommitmentsBN = await contract.getIdentityCommitments(threadIds[0]);
             for (var i = 0; i < identityCommitmentsBN.length; i++) {
                 identityCommitments.push(identityCommitmentsBN[i].toString());
             }
         });
 
-        it("Should post a question to AMA session #1 (Alice)", async () => {
+        it("Should add a comment to Thread #1 (Alice)", async () => {
             const merkleProof = generateMerkleProof(DEPTH, ZERO_VALUE, identityCommitments, identityCommitment);
-            const nullifier = `${sessionIds[0]}_${questionIds[0]}`;
+            const nullifier = `${threadIds[0]}_${commentIds[0]}`;
             const externalNullifier = genExternalNullifier(nullifier);
-            const questionNullifier = Semaphore.genNullifierHash(externalNullifier, identity.getNullifier())
+            const commentNullifier = Semaphore.genNullifierHash(externalNullifier, identity.getNullifier())
 
             const witness = Semaphore.genWitness(
                 identity.getTrapdoor(),
                 identity.getNullifier(),
                 merkleProof,
-                questionNullifier,
+                commentNullifier,
                 signals[0]
             )
 
             const { proof, publicSignals } = await Semaphore.genProof(witness, WASM_FILEPATH, FINAL_ZKEY_FILEPATH);
             const solidityProof = Semaphore.packToSolidityProof(proof)
 
-            const transaction = contract.postQuestion(sessionIds[0], questionIds[0], bytes32Signal0, merkleProof.root, publicSignals.nullifierHash, publicSignals.externalNullifier, solidityProof)
-            await expect(transaction).to.emit(contract, "NewQuestion").withArgs(sessionIds[0], questionIds[0], bytes32Signal0)
+            const transaction = contract.postComment(threadIds[0], commentIds[0], bytes32Signal0, merkleProof.root, publicSignals.nullifierHash, publicSignals.externalNullifier, solidityProof)
+            await expect(transaction).to.emit(contract, "NewComment").withArgs(threadIds[0], commentIds[0], bytes32Signal0)
         })
 
-        it("Should post another question to AMA session #1 (Alice)", async () => {
+        it("Should add a reply to comment #1 to Thread #1 (Alice)", async () => {
             const merkleProof = generateMerkleProof(DEPTH, ZERO_VALUE, identityCommitments, identityCommitment);
-            const nullifier = `${sessionIds[0]}_${questionIds[1]}`;
+            const nullifier = `${threadIds[0]}_${commentIds[0]}_${replyIds[0]}`;
             const externalNullifier = genExternalNullifier(nullifier);
-            const questionNullifier = Semaphore.genNullifierHash(externalNullifier, identity.getNullifier())
+            const commentNullifier = Semaphore.genNullifierHash(externalNullifier, identity.getNullifier())
 
             const witness = Semaphore.genWitness(
                 identity.getTrapdoor(),
                 identity.getNullifier(),
                 merkleProof,
-                questionNullifier,
+                commentNullifier,
                 signals[0]
             )
 
             const { proof, publicSignals } = await Semaphore.genProof(witness, WASM_FILEPATH, FINAL_ZKEY_FILEPATH);
             const solidityProof = Semaphore.packToSolidityProof(proof)
 
-            const transaction = contract.postQuestion(sessionIds[0], questionIds[1], bytes32Signal0, merkleProof.root, publicSignals.nullifierHash, publicSignals.externalNullifier, solidityProof)
-            await expect(transaction).to.emit(contract, "NewQuestion").withArgs(sessionIds[0], questionIds[1], bytes32Signal0)
+            const transaction = contract.postReply(threadIds[0], commentIds[0], replyIds[0], bytes32Signal0, merkleProof.root, publicSignals.nullifierHash, publicSignals.externalNullifier, solidityProof)
+            await expect(transaction).to.emit(contract, "NewReply").withArgs(threadIds[0], commentIds[0], replyIds[0], bytes32Signal0)
         })
 
-        it("Should not post same question to AMA session #1 (Alice)", async () => {
+        it("Should add another comment to Thread #1 (Alice)", async () => {
             const merkleProof = generateMerkleProof(DEPTH, ZERO_VALUE, identityCommitments, identityCommitment);
-            const nullifier = `${sessionIds[0]}_${questionIds[1]}`;
+            const nullifier = `${threadIds[0]}_${commentIds[1]}`;
             const externalNullifier = genExternalNullifier(nullifier);
-            const questionNullifier = Semaphore.genNullifierHash(externalNullifier, identity.getNullifier())
+            const commentNullifier = Semaphore.genNullifierHash(externalNullifier, identity.getNullifier())
 
             const witness = Semaphore.genWitness(
                 identity.getTrapdoor(),
                 identity.getNullifier(),
                 merkleProof,
-                questionNullifier,
+                commentNullifier,
+                signals[0]
+            )
+
+            const { proof, publicSignals } = await Semaphore.genProof(witness, WASM_FILEPATH, FINAL_ZKEY_FILEPATH);
+            const solidityProof = Semaphore.packToSolidityProof(proof)
+
+            const transaction = contract.postComment(threadIds[0], commentIds[1], bytes32Signal0, merkleProof.root, publicSignals.nullifierHash, publicSignals.externalNullifier, solidityProof)
+            await expect(transaction).to.emit(contract, "NewComment").withArgs(threadIds[0], commentIds[1], bytes32Signal0)
+        })
+        it("Should another a reply #2 to comment #1 to Thread #1 (Alice)", async () => {
+            const merkleProof = generateMerkleProof(DEPTH, ZERO_VALUE, identityCommitments, identityCommitment);
+            const nullifier = `${threadIds[0]}_${commentIds[0]}_${replyIds[1]}`;
+            const externalNullifier = genExternalNullifier(nullifier);
+            const commentNullifier = Semaphore.genNullifierHash(externalNullifier, identity.getNullifier())
+
+            const witness = Semaphore.genWitness(
+                identity.getTrapdoor(),
+                identity.getNullifier(),
+                merkleProof,
+                commentNullifier,
+                signals[0]
+            )
+
+            const { proof, publicSignals } = await Semaphore.genProof(witness, WASM_FILEPATH, FINAL_ZKEY_FILEPATH);
+            const solidityProof = Semaphore.packToSolidityProof(proof)
+
+            const transaction = contract.postReply(threadIds[0], commentIds[0], replyIds[1], bytes32Signal0, merkleProof.root, publicSignals.nullifierHash, publicSignals.externalNullifier, solidityProof)
+            await expect(transaction).to.emit(contract, "NewReply").withArgs(threadIds[0], commentIds[0], replyIds[1], bytes32Signal0)
+        })
+
+        it("Should not post same comment to Thread #1 (Alice)", async () => {
+            const merkleProof = generateMerkleProof(DEPTH, ZERO_VALUE, identityCommitments, identityCommitment);
+            const nullifier = `${threadIds[0]}_${commentIds[1]}`;
+            const externalNullifier = genExternalNullifier(nullifier);
+            const commentNullifier = Semaphore.genNullifierHash(externalNullifier, identity.getNullifier())
+
+            const witness = Semaphore.genWitness(
+                identity.getTrapdoor(),
+                identity.getNullifier(),
+                merkleProof,
+                commentNullifier,
                 signals[0] // post
             )
 
             const { proof, publicSignals } = await Semaphore.genProof(witness, WASM_FILEPATH, FINAL_ZKEY_FILEPATH);
             const solidityProof = Semaphore.packToSolidityProof(proof)
 
-            const transaction = contract.postQuestion(sessionIds[0], questionIds[0], bytes32Signal0, merkleProof.root, publicSignals.nullifierHash, publicSignals.externalNullifier, solidityProof)
+            const transaction = contract.postComment(threadIds[0], commentIds[1], bytes32Signal0, merkleProof.root, publicSignals.nullifierHash, publicSignals.externalNullifier, solidityProof)
             await expect(transaction).to.be.revertedWith("SemaphoreCore: you cannot use the same nullifier twice");
         })
-
-        it("Should not post and vote the same question to AMA session #1 (Alice)", async () => {
-            // user who posts the question cannot upvote his/her own question
+        
+        it("Should not post same reply 2 to comment 2 to Thread #1 (Alice)", async () => {
             const merkleProof = generateMerkleProof(DEPTH, ZERO_VALUE, identityCommitments, identityCommitment);
-            const nullifier = `${sessionIds[0]}_${questionIds[1]}`;
+            const nullifier = `${threadIds[0]}_${commentIds[0]}_${replyIds[1]}`;
             const externalNullifier = genExternalNullifier(nullifier);
-            const questionNullifier = Semaphore.genNullifierHash(externalNullifier, identity.getNullifier())
+            const commentNullifier = Semaphore.genNullifierHash(externalNullifier, identity.getNullifier())
 
             const witness = Semaphore.genWitness(
                 identity.getTrapdoor(),
                 identity.getNullifier(),
                 merkleProof,
-                questionNullifier,
-                signals[1] // vote
+                commentNullifier,
+                signals[0] // post
             )
 
             const { proof, publicSignals } = await Semaphore.genProof(witness, WASM_FILEPATH, FINAL_ZKEY_FILEPATH);
             const solidityProof = Semaphore.packToSolidityProof(proof)
 
-            const transaction = contract.postQuestion(sessionIds[0], questionIds[0], bytes32Signal0, merkleProof.root, publicSignals.nullifierHash, publicSignals.externalNullifier, solidityProof)
+            const transaction = contract.postReply(threadIds[0], commentIds[0], replyIds[1], bytes32Signal0, merkleProof.root, publicSignals.nullifierHash, publicSignals.externalNullifier, solidityProof)
             await expect(transaction).to.be.revertedWith("SemaphoreCore: you cannot use the same nullifier twice");
         })
+        it("Should not post and like the same comment to Thread #1 (Alice)", async () => {
+            // user who posts the question cannot upvote/like his/her own question
+            const merkleProof = generateMerkleProof(DEPTH, ZERO_VALUE, identityCommitments, identityCommitment);
+            const nullifier = `${threadIds[0]}_${commentIds[1]}`;
+            const externalNullifier = genExternalNullifier(nullifier);
+            const commentNullifier = Semaphore.genNullifierHash(externalNullifier, identity.getNullifier())
 
-        it("Should upvote Alice's question in AMA session #1 (Bob -> Question #1)", async () => {
+            const witness = Semaphore.genWitness(
+                identity.getTrapdoor(),
+                identity.getNullifier(),
+                merkleProof,
+                commentNullifier,
+                signals[1] // vote/like
+            )
+
+            const { proof, publicSignals } = await Semaphore.genProof(witness, WASM_FILEPATH, FINAL_ZKEY_FILEPATH);
+            const solidityProof = Semaphore.packToSolidityProof(proof)
+
+            const transaction = contract.postComment(threadIds[0], commentIds[0], bytes32Signal0, merkleProof.root, publicSignals.nullifierHash, publicSignals.externalNullifier, solidityProof)
+            await expect(transaction).to.be.revertedWith("SemaphoreCore: you cannot use the same nullifier twice");
+        })
+        
+        it("Should not post and like the same Reply to Thread #1 (Alice)", async () => {
+            // user who posts the question cannot upvote/like his/her own question
+            const merkleProof = generateMerkleProof(DEPTH, ZERO_VALUE, identityCommitments, identityCommitment);
+            const nullifier = `${threadIds[0]}_${commentIds[0]}_${replyIds[0]}`;
+            const externalNullifier = genExternalNullifier(nullifier);
+            const commentNullifier = Semaphore.genNullifierHash(externalNullifier, identity.getNullifier())
+
+            const witness = Semaphore.genWitness(
+                identity.getTrapdoor(),
+                identity.getNullifier(),
+                merkleProof,
+                commentNullifier,
+                signals[1] // vote/like
+            )
+
+            const { proof, publicSignals } = await Semaphore.genProof(witness, WASM_FILEPATH, FINAL_ZKEY_FILEPATH);
+            const solidityProof = Semaphore.packToSolidityProof(proof)
+
+            const transaction = contract.postReply(threadIds[0], commentIds[0], replyIds[0], bytes32Signal0, merkleProof.root, publicSignals.nullifierHash, publicSignals.externalNullifier, solidityProof)
+            await expect(transaction).to.be.revertedWith("SemaphoreCore: you cannot use the same nullifier twice");
+        })
+        it("Should like Alice's comment in Thread #1 (Bob -> Comment #1)", async () => {
             // create an identity commitment for the user
             const message = await bob.signMessage(IDENTITY_MESSAGE)
             const identity = new ZkIdentity(Strategy.MESSAGE, message)
             const identityCommitment = identity.genIdentityCommitment()
 
             const merkleProof = generateMerkleProof(DEPTH, ZERO_VALUE, identityCommitments, identityCommitment);
-            const nullifier = `${sessionIds[0]}_${questionIds[0]}`;
+            const nullifier = `${threadIds[0]}_${commentIds[0]}`;
             const externalNullifier = genExternalNullifier(nullifier);
-            const questionNullifier = Semaphore.genNullifierHash(externalNullifier, identity.getNullifier())
+            const commentNullifier = Semaphore.genNullifierHash(externalNullifier, identity.getNullifier())
 
             let bytes32Signal1 = ethers.utils.formatBytes32String(signals[1])
 
@@ -223,27 +305,53 @@ describe("AMA", function () {
                 identity.getTrapdoor(),
                 identity.getNullifier(),
                 merkleProof,
-                questionNullifier,
+                commentNullifier,
                 signals[1]
             )
 
             const { proof, publicSignals } = await Semaphore.genProof(witness, WASM_FILEPATH, FINAL_ZKEY_FILEPATH);
             const solidityProof = Semaphore.packToSolidityProof(proof)
 
-            const transaction = contract.voteQuestion(sessionIds[0], questionIds[0], bytes32Signal1, merkleProof.root, publicSignals.nullifierHash, publicSignals.externalNullifier, solidityProof)
-            await expect(transaction).to.emit(contract, "QuestionVoted").withArgs(sessionIds[0], questionIds[0], 1) // 1 vote
+            const transaction = contract.likeComment(threadIds[0], commentIds[0], bytes32Signal1, merkleProof.root, publicSignals.nullifierHash, publicSignals.externalNullifier, solidityProof)
+            await expect(transaction).to.emit(contract, "CommentLiked").withArgs(threadIds[0], commentIds[0], 1) // 1 vote
         })
+        it("Should like Alice's reply in Thread #1 (Bob -> reply #1)", async () => {
+            // create an identity commitment for the user
+            const message = await bob.signMessage(IDENTITY_MESSAGE)
+            const identity = new ZkIdentity(Strategy.MESSAGE, message)
+            const identityCommitment = identity.genIdentityCommitment()
 
-        it("Should upvote Alice's question in AMA session #1 (Charlie -> Question #1)", async () => {
+            const merkleProof = generateMerkleProof(DEPTH, ZERO_VALUE, identityCommitments, identityCommitment);
+            const nullifier = `${threadIds[0]}_${commentIds[0]}_${replyIds[0]}`;
+            const externalNullifier = genExternalNullifier(nullifier);
+            const commentNullifier = Semaphore.genNullifierHash(externalNullifier, identity.getNullifier())
+
+            let bytes32Signal1 = ethers.utils.formatBytes32String(signals[1])
+
+            const witness = Semaphore.genWitness(
+                identity.getTrapdoor(),
+                identity.getNullifier(),
+                merkleProof,
+                commentNullifier,
+                signals[1]
+            )
+
+            const { proof, publicSignals } = await Semaphore.genProof(witness, WASM_FILEPATH, FINAL_ZKEY_FILEPATH);
+            const solidityProof = Semaphore.packToSolidityProof(proof)
+
+            const transaction = contract.likeReply(threadIds[0], commentIds[0], replyIds[0], bytes32Signal1, merkleProof.root, publicSignals.nullifierHash, publicSignals.externalNullifier, solidityProof)
+            await expect(transaction).to.emit(contract, "ReplyLiked").withArgs(threadIds[0], commentIds[0], replyIds[0], 1) // 1 vote
+        })
+        it("Should like Alice's comment in Thread #1 (Charlie -> Comment #1)", async () => {
             // create an identity commitment for the user
             const message = await charlie.signMessage(IDENTITY_MESSAGE)
             const identity = new ZkIdentity(Strategy.MESSAGE, message)
             const identityCommitment = identity.genIdentityCommitment()
 
             const merkleProof = generateMerkleProof(DEPTH, ZERO_VALUE, identityCommitments, identityCommitment);
-            const nullifier = `${sessionIds[0]}_${questionIds[0]}`;
+            const nullifier = `${threadIds[0]}_${commentIds[0]}`;
             const externalNullifier = genExternalNullifier(nullifier);
-            const questionNullifier = Semaphore.genNullifierHash(externalNullifier, identity.getNullifier())
+            const commentNullifier = Semaphore.genNullifierHash(externalNullifier, identity.getNullifier())
 
             let bytes32Signal1 = ethers.utils.formatBytes32String(signals[1])
 
@@ -251,27 +359,53 @@ describe("AMA", function () {
                 identity.getTrapdoor(),
                 identity.getNullifier(),
                 merkleProof,
-                questionNullifier,
+                commentNullifier,
                 signals[1]
             )
 
             const { proof, publicSignals } = await Semaphore.genProof(witness, WASM_FILEPATH, FINAL_ZKEY_FILEPATH);
             const solidityProof = Semaphore.packToSolidityProof(proof)
 
-            const transaction = contract.voteQuestion(sessionIds[0], questionIds[0], bytes32Signal1, merkleProof.root, publicSignals.nullifierHash, publicSignals.externalNullifier, solidityProof)
-            await expect(transaction).to.emit(contract, "QuestionVoted").withArgs(sessionIds[0], questionIds[0], 2) // 2 votes: 1 from bob and 1 from charlie
+            const transaction = contract.likeComment(threadIds[0], commentIds[0], bytes32Signal1, merkleProof.root, publicSignals.nullifierHash, publicSignals.externalNullifier, solidityProof)
+            await expect(transaction).to.emit(contract, "CommentLiked").withArgs(threadIds[0], commentIds[0], 2) // 2 votes: 1 from bob and 1 from charlie
         })
+        it("Should give another like to Alice's reply in Thread #1 (Charlie -> reply #1)", async () => {
+            // create an identity commitment for the user
+            const message = await charlie.signMessage(IDENTITY_MESSAGE)
+            const identity = new ZkIdentity(Strategy.MESSAGE, message)
+            const identityCommitment = identity.genIdentityCommitment()
 
-        it("Should upvote Alice's second question in AMA session #1 (Bob -> Question #2)", async () => {
+            const merkleProof = generateMerkleProof(DEPTH, ZERO_VALUE, identityCommitments, identityCommitment);
+            const nullifier = `${threadIds[0]}_${commentIds[0]}_${replyIds[0]}`;
+            const externalNullifier = genExternalNullifier(nullifier);
+            const commentNullifier = Semaphore.genNullifierHash(externalNullifier, identity.getNullifier())
+
+            let bytes32Signal1 = ethers.utils.formatBytes32String(signals[1])
+
+            const witness = Semaphore.genWitness(
+                identity.getTrapdoor(),
+                identity.getNullifier(),
+                merkleProof,
+                commentNullifier,
+                signals[1]
+            )
+
+            const { proof, publicSignals } = await Semaphore.genProof(witness, WASM_FILEPATH, FINAL_ZKEY_FILEPATH);
+            const solidityProof = Semaphore.packToSolidityProof(proof)
+
+            const transaction = contract.likeReply(threadIds[0], commentIds[0], replyIds[0], bytes32Signal1, merkleProof.root, publicSignals.nullifierHash, publicSignals.externalNullifier, solidityProof)
+            await expect(transaction).to.emit(contract, "ReplyLiked").withArgs(threadIds[0], commentIds[0], replyIds[0], 2) // 1 vote
+        })
+        it("Should like Alice's second comment in Thread #1 (Bob -> Comment #2)", async () => {
             // create an identity commitment for the user
             const message = await bob.signMessage(IDENTITY_MESSAGE)
             const identity = new ZkIdentity(Strategy.MESSAGE, message)
             const identityCommitment = identity.genIdentityCommitment()
 
             const merkleProof = generateMerkleProof(DEPTH, ZERO_VALUE, identityCommitments, identityCommitment);
-            const nullifier = `${sessionIds[0]}_${questionIds[1]}`;
+            const nullifier = `${threadIds[0]}_${commentIds[1]}`;
             const externalNullifier = genExternalNullifier(nullifier);
-            const questionNullifier = Semaphore.genNullifierHash(externalNullifier, identity.getNullifier())
+            const commentNullifier = Semaphore.genNullifierHash(externalNullifier, identity.getNullifier())
 
             let bytes32Signal1 = ethers.utils.formatBytes32String(signals[1])
 
@@ -279,27 +413,26 @@ describe("AMA", function () {
                 identity.getTrapdoor(),
                 identity.getNullifier(),
                 merkleProof,
-                questionNullifier,
+                commentNullifier,
                 signals[1]
             )
 
             const { proof, publicSignals } = await Semaphore.genProof(witness, WASM_FILEPATH, FINAL_ZKEY_FILEPATH);
             const solidityProof = Semaphore.packToSolidityProof(proof)
 
-            const transaction = contract.voteQuestion(sessionIds[0], questionIds[1], bytes32Signal1, merkleProof.root, publicSignals.nullifierHash, publicSignals.externalNullifier, solidityProof)
-            await expect(transaction).to.emit(contract, "QuestionVoted").withArgs(sessionIds[0], questionIds[1], 1) // 1 vote
+            const transaction = contract.likeComment(threadIds[0], commentIds[1], bytes32Signal1, merkleProof.root, publicSignals.nullifierHash, publicSignals.externalNullifier, solidityProof)
+            await expect(transaction).to.emit(contract, "CommentLiked").withArgs(threadIds[0], commentIds[1], 1) // 1 vote
         })
-
-        it("Should not upvote Alice's second question in AMA session #1 (Bob -> Question #2)", async () => {
+        it("Should like Alice's reply 2 in Thread #1 (Bob -> reply #2)", async () => {
             // create an identity commitment for the user
             const message = await bob.signMessage(IDENTITY_MESSAGE)
             const identity = new ZkIdentity(Strategy.MESSAGE, message)
             const identityCommitment = identity.genIdentityCommitment()
 
             const merkleProof = generateMerkleProof(DEPTH, ZERO_VALUE, identityCommitments, identityCommitment);
-            const nullifier = `${sessionIds[0]}_${questionIds[1]}`;
+            const nullifier = `${threadIds[0]}_${commentIds[0]}_${replyIds[1]}`;
             const externalNullifier = genExternalNullifier(nullifier);
-            const questionNullifier = Semaphore.genNullifierHash(externalNullifier, identity.getNullifier())
+            const commentNullifier = Semaphore.genNullifierHash(externalNullifier, identity.getNullifier())
 
             let bytes32Signal1 = ethers.utils.formatBytes32String(signals[1])
 
@@ -307,37 +440,91 @@ describe("AMA", function () {
                 identity.getTrapdoor(),
                 identity.getNullifier(),
                 merkleProof,
-                questionNullifier,
+                commentNullifier,
                 signals[1]
             )
 
             const { proof, publicSignals } = await Semaphore.genProof(witness, WASM_FILEPATH, FINAL_ZKEY_FILEPATH);
             const solidityProof = Semaphore.packToSolidityProof(proof)
 
-            const transaction = contract.voteQuestion(sessionIds[0], questionIds[0], bytes32Signal1, merkleProof.root, publicSignals.nullifierHash, publicSignals.externalNullifier, solidityProof)
+            const transaction = contract.likeReply(threadIds[0], commentIds[0], replyIds[1], bytes32Signal1, merkleProof.root, publicSignals.nullifierHash, publicSignals.externalNullifier, solidityProof)
+            await expect(transaction).to.emit(contract, "ReplyLiked").withArgs(threadIds[0], commentIds[0], replyIds[1], 1) // 1 vote
+        })
+        it("Should not like Alice's second comment in Thread #1 AGAIN (Bob -> Comment #1)", async () => {
+            // create an identity commitment for the user
+            const message = await bob.signMessage(IDENTITY_MESSAGE)
+            const identity = new ZkIdentity(Strategy.MESSAGE, message)
+            const identityCommitment = identity.genIdentityCommitment()
+
+            const merkleProof = generateMerkleProof(DEPTH, ZERO_VALUE, identityCommitments, identityCommitment);
+            const nullifier = `${threadIds[0]}_${commentIds[1]}`;
+            const externalNullifier = genExternalNullifier(nullifier);
+            const commentNullifier = Semaphore.genNullifierHash(externalNullifier, identity.getNullifier())
+
+            let bytes32Signal1 = ethers.utils.formatBytes32String(signals[1])
+
+            const witness = Semaphore.genWitness(
+                identity.getTrapdoor(),
+                identity.getNullifier(),
+                merkleProof,
+                commentNullifier,
+                signals[1]
+            )
+
+            const { proof, publicSignals } = await Semaphore.genProof(witness, WASM_FILEPATH, FINAL_ZKEY_FILEPATH);
+            const solidityProof = Semaphore.packToSolidityProof(proof)
+
+            const transaction = contract.likeComment(threadIds[0], commentIds[0], bytes32Signal1, merkleProof.root, publicSignals.nullifierHash, publicSignals.externalNullifier, solidityProof)
+            await expect(transaction).to.be.revertedWith("SemaphoreCore: you cannot use the same nullifier twice");
+        })
+        it("Should not like Alice's second Reply in Thread #1 AGAIN (Bob -> Reply #2)", async () => {
+            // create an identity commitment for the user
+            const message = await bob.signMessage(IDENTITY_MESSAGE)
+            const identity = new ZkIdentity(Strategy.MESSAGE, message)
+            const identityCommitment = identity.genIdentityCommitment()
+    
+            const merkleProof = generateMerkleProof(DEPTH, ZERO_VALUE, identityCommitments, identityCommitment);
+            const nullifier = `${threadIds[0]}_${commentIds[0]}_${replyIds[1]}`;
+            const externalNullifier = genExternalNullifier(nullifier);
+            const commentNullifier = Semaphore.genNullifierHash(externalNullifier, identity.getNullifier())
+    
+            let bytes32Signal1 = ethers.utils.formatBytes32String(signals[1])
+    
+            const witness = Semaphore.genWitness(
+                identity.getTrapdoor(),
+                identity.getNullifier(),
+                merkleProof,
+                commentNullifier,
+                signals[1]
+            )
+    
+            const { proof, publicSignals } = await Semaphore.genProof(witness, WASM_FILEPATH, FINAL_ZKEY_FILEPATH);
+            const solidityProof = Semaphore.packToSolidityProof(proof)
+    
+            const transaction = contract.likeReply(threadIds[0], commentIds[0], replyIds[1], bytes32Signal1, merkleProof.root, publicSignals.nullifierHash, publicSignals.externalNullifier, solidityProof)
             await expect(transaction).to.be.revertedWith("SemaphoreCore: you cannot use the same nullifier twice");
         })
     })
 
-    describe("# AMA session state", () => {
-        it("Should pause the AMA session", async () => {
-            const transaction = contract.pauseAmaSession(sessionIds[0]);
-            await expect(transaction).to.emit(contract, "AmaSessionStatusChanged").withArgs(sessionIds[0], PAUSED)
+    describe("# Thread state", () => {
+        it("Should pause the Thread", async () => {
+            const transaction = contract.pauseThread(threadIds[0]);
+            await expect(transaction).to.emit(contract, "ThreadStatusChanged").withArgs(threadIds[0], PAUSED)
         })
 
-        it("Should resume a paused AMA session", async () => {
-            const transaction = contract.resumeAmaSession(sessionIds[0]);
-            await expect(transaction).to.emit(contract, "AmaSessionStatusChanged").withArgs(sessionIds[0], ACTIVE)
+        it("Should resume a paused Thread", async () => {
+            const transaction = contract.resumeThread(threadIds[0]);
+            await expect(transaction).to.emit(contract, "ThreadStatusChanged").withArgs(threadIds[0], ACTIVE)
         })
 
-        it("Should end the AMA session", async () => {
-            const transaction = contract.endAmaSession(sessionIds[0]);
-            await expect(transaction).to.emit(contract, "AmaSessionStatusChanged").withArgs(sessionIds[0], ENDED)
+        it("Should end the Thread", async () => {
+            const transaction = contract.endThread(threadIds[0]);
+            await expect(transaction).to.emit(contract, "ThreadStatusChanged").withArgs(threadIds[0], ENDED)
         })
 
-        it("Should not start an AMA session that has ended", async () => {
-            const transaction = contract.startAmaSession(sessionIds[0]);
-            await expect(transaction).to.be.revertedWith("AMA session's state should be Not Started");
+        it("Should not start a Thread that has ended", async () => {
+            const transaction = contract.startThread(threadIds[0]);
+            await expect(transaction).to.be.revertedWith("Thread's state should be Not Started");
         })
     })
 

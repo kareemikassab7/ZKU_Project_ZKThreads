@@ -31,7 +31,7 @@ task("deploy", "Deploy AMA contract")
         await incrementalBinaryTreeLib.deployed()
         logs && console.log(`IncrementalBinaryTree library has been deployed to: ${incrementalBinaryTreeLib.address}`)
 
-        const AmaContract = await ethers.getContractFactory("AMA", {
+        const AmaContract = await ethers.getContractFactory("zkThreads", {
             libraries: {
                 IncrementalBinaryTree: incrementalBinaryTreeLib.address
             }

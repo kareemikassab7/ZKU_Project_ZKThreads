@@ -16,7 +16,7 @@ const config: HardhatUserConfig = {
     dependencyCompiler: {
         paths: ["@appliedzkp/semaphore-contracts/base/Verifier.sol"]
     },
-    networks: {
+    /*networks: {
         testnet: {
             url: `${process.env.HMY_TESTNET_RPC_URL}`,
             accounts: [`0x${process.env.HMY_PRIVATE_KEY}`]
@@ -25,7 +25,7 @@ const config: HardhatUserConfig = {
             url: `${process.env.HMY_MAINNET_RPC_URL}`,
             accounts: [`0x${process.env.HMY_PRIVATE_KEY_MAINNET}`]
         }
-    },
+    },*/
     gasReporter: {
         enabled: process.env.REPORT_GAS !== undefined,
         currency: "USD"
